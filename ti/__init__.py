@@ -246,6 +246,7 @@ def action_log(period):
     data = store.load()
     work = data['work'] + data['interrupt_stack']
     log = defaultdict(lambda: {'delta': timedelta()})
+    tag_log = defaultdict(lambda: {'delta': timedelta()})
     current = None
 
     def parse_time_string(time_string: str) -> tuple[datetime, datetime]:
@@ -305,12 +306,17 @@ def action_log(period):
             if 'end' in item:
                 log[item['name']]['delta'] += (
                     parse_isotime(item['end']) - start_time)
+                for tag in item['tags']:
+                    tag_log[tag]['delta'] += parse_isotime(item['end']) - start_time
             else:
                 log[item['name']]['delta'] += datetime.utcnow() - start_time
+                for tag in item['tags']:
+                    tag_log[tag]['delta'] += datetime.utcnow() - start_time
                 current = item['name']
 
     name_col_len = 0
 
+    print("Tasks:")
     for name, item in log.items():
         name_col_len = max(name_col_len, len(strip_color(name)))
 
@@ -333,9 +339,34 @@ def action_log(period):
         log[name]['tmsg'] = ', '.join(tmsg)[::-1].replace(',', '& ', 1)[::-1]
 
     for name, item in sorted(log.items(), key=(lambda x: x[0]), reverse=True):
-        print(ljust_with_color(name, name_col_len), ' ∙∙ ', item['tmsg'],
+        print("-", ljust_with_color(name, name_col_len), ' ∙∙ ', item['tmsg'],
               end=' ← working\n' if current == name else '\n')
 
+    print("Tags:")
+    for name, item in tag_log.items():
+        name_col_len = max(name_col_len, len(strip_color(name)))
+
+        secs = item['delta'].total_seconds()
+        tmsg = []
+
+        if secs > 3600:
+            hours = int(secs // 3600)
+            secs -= hours * 3600
+            tmsg.append(str(hours) + ' hour' + ('s' if hours > 1 else ''))
+
+        if secs > 60:
+            mins = int(secs // 60)
+            secs -= mins * 60
+            tmsg.append(str(mins) + ' minute' + ('s' if mins > 1 else ''))
+
+        if secs:
+            tmsg.append(str(int(secs)) + ' second' + ('s' if secs > 1 else ''))
+
+        tag_log[name]['tmsg'] = ', '.join(tmsg)[::-1].replace(',', '& ', 1)[::-1]
+
+    for name, item in sorted(tag_log.items(), key=(lambda x: x[0]), reverse=True):
+        print("-", ljust_with_color(name, name_col_len), ' ∙∙ ', item['tmsg'],
+              end=' ← working\n' if current == name else '\n')
 
 def action_edit():
     if "EDITOR" not in os.environ:
