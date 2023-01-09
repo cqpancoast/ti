@@ -35,7 +35,7 @@ import re
 import subprocess
 import sys
 import tempfile
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, time
 from collections import defaultdict
 from os import path
 
@@ -248,14 +248,66 @@ def action_log(period):
     log = defaultdict(lambda: {'delta': timedelta()})
     current = None
 
+    def parse_time_string(time_string: str) -> tuple[datetime, datetime]:
+        """
+        Parse a time string and return a tuple of two datetime objects representing
+        the start and end of the time period specified by the input string.
+
+        The following input forms are allowed:
+            - "today"
+            - "yesterday"
+            - "the last X days" (where X is an integer)
+            - "X days ago" (where X is an integer)
+            - "since Monday morning" (where Monday is the name of a day of the week)
+            - "the past week"
+
+        If the input string does not match one of these forms, a ValueError is raised.
+        """
+
+        now = datetime.now()
+        if time_string == "today":
+            start = datetime.combine(now, time.min)
+            end = datetime.combine(now, time.max)
+            return start, end
+        elif time_string == "yesterday":
+            start = datetime.combine(now - timedelta(days=1), time.min)
+            end = datetime.combine(now - timedelta(days=1), time.max)
+            return start, end
+        elif time_string.startswith("the last "):
+            num_days = int(time_string.split()[-1])
+            start = now - timedelta(days=num_days)
+            end = datetime.combine(now, time.max)
+            return start, end
+        elif time_string.endswith(" ago"):
+            num_days = int(time_string.split()[0])
+            start = now - timedelta(days=num_days)
+            end = now
+            return start, end
+        elif time_string.startswith("since "):
+            day_of_week = time_string.split()[1]
+            day_of_week_num = datetime.strptime(day_of_week, '%A').weekday()
+            num_days_since_monday = (now.weekday() - day_of_week_num) % 7
+            start = now - timedelta(days=num_days_since_monday)
+            end = datetime.combine(now, time.max)
+            return start, end
+        elif time_string == "the past week":
+            start = now - timedelta(days=7)
+            end = datetime.combine(now, time.max)
+            return start, end
+        else:
+            raise ValueError(f"Unrecognized time string: {time_string}")
+
+    start, end = parse_time_string(period)
+
     for item in work:
         start_time = parse_isotime(item['start'])
-        if 'end' in item:
-            log[item['name']]['delta'] += (
-                parse_isotime(item['end']) - start_time)
-        else:
-            log[item['name']]['delta'] += datetime.utcnow() - start_time
-            current = item['name']
+        if start_time >= start and start_time < end:
+            if 'end' in item:
+                log[item['name']]['delta'] += (
+                    parse_isotime(item['end']) - start_time)
+            else:
+                log[item['name']]['delta'] += datetime.utcnow() - start_time
+                current = item['name']
 
     name_col_len = 0
 
@@ -276,7 +328,7 @@ def action_log(period):
             tmsg.append(str(mins) + ' minute' + ('s' if mins > 1 else ''))
 
         if secs:
-            tmsg.append(str(secs) + ' second' + ('s' if secs > 1 else ''))
+            tmsg.append(str(int(secs)) + ' second' + ('s' if secs > 1 else ''))
 
         log[name]['tmsg'] = ', '.join(tmsg)[::-1].replace(',', '& ', 1)[::-1]
 
