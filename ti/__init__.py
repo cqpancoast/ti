@@ -308,12 +308,14 @@ def action_log(period):
             if 'end' in item:
                 log[item['name']]['delta'] += (
                     parse_isotime(item['end'], tz) - start_time)
-                for tag in item['tags']:
-                    tag_log[tag]['delta'] += parse_isotime(item['end'], tz) - start_time
+                if 'tags' in item:
+                    for tag in item['tags']:
+                        tag_log[tag]['delta'] += parse_isotime(item['end'], tz) - start_time
             else:
                 log[item['name']]['delta'] += datetime.now(tz) - start_time
-                for tag in item['tags']:
-                    tag_log[tag]['delta'] += datetime.now(tz) - start_time
+                if 'tags' in item:
+                    for tag in item['tags']:
+                        tag_log[tag]['delta'] += datetime.now(tz) - start_time
                 current = item['name']
 
     name_col_len = 0
