@@ -35,6 +35,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import pytz
 from datetime import datetime, timedelta, time
 from collections import defaultdict
 from os import path
@@ -42,6 +43,8 @@ from os import path
 import yaml
 from colorama import Fore
 
+# MY SHIT
+tz = pytz.timezone("America/Los_Angeles")
 
 class TIError(Exception):
     """Errors raised by TI."""
@@ -235,8 +238,8 @@ def action_status():
     data = store.load()
     current = data['work'][-1]
 
-    start_time = parse_isotime(current['start'])
-    diff = timegap(start_time, datetime.utcnow())
+    start_time = parse_isotime(current['start'], tz)
+    diff = timegap(start_time, datetime.now(tz))
 
     print('You have been working on {0} for {1}.'.format(
         green(current['name']), diff))
@@ -264,54 +267,53 @@ def action_log(period):
 
         If the input string does not match one of these forms, a ValueError is raised.
         """
+        
+        if time_string is None:
+            time_string = "today"
 
-        now = datetime.now()
+        now = datetime.now(tz)
         if time_string == "today":
             start = datetime.combine(now, time.min)
             end = datetime.combine(now, time.max)
-            return start, end
         elif time_string == "yesterday":
             start = datetime.combine(now - timedelta(days=1), time.min)
             end = datetime.combine(now - timedelta(days=1), time.max)
-            return start, end
         elif time_string.startswith("the last "):
             num_days = int(time_string.split()[-1])
             start = now - timedelta(days=num_days)
             end = datetime.combine(now, time.max)
-            return start, end
         elif time_string.endswith(" ago"):
             num_days = int(time_string.split()[0])
             start = now - timedelta(days=num_days)
             end = now
-            return start, end
         elif time_string.startswith("since "):
             day_of_week = time_string.split()[1]
             day_of_week_num = datetime.strptime(day_of_week, '%A').weekday()
             num_days_since_monday = (now.weekday() - day_of_week_num) % 7
             start = now - timedelta(days=num_days_since_monday)
             end = datetime.combine(now, time.max)
-            return start, end
         elif time_string == "the past week":
             start = now - timedelta(days=7)
             end = datetime.combine(now, time.max)
-            return start, end
         else:
             raise ValueError(f"Unrecognized time string: {time_string}")
+
+        return start.astimezone(tz), end.astimezone(tz)
 
     start, end = parse_time_string(period)
 
     for item in work:
-        start_time = parse_isotime(item['start'])
+        start_time = parse_isotime(item['start'], tz)
         if start_time >= start and start_time < end:
             if 'end' in item:
                 log[item['name']]['delta'] += (
-                    parse_isotime(item['end']) - start_time)
+                    parse_isotime(item['end'], tz) - start_time)
                 for tag in item['tags']:
-                    tag_log[tag]['delta'] += parse_isotime(item['end']) - start_time
+                    tag_log[tag]['delta'] += parse_isotime(item['end'], tz) - start_time
             else:
-                log[item['name']]['delta'] += datetime.utcnow() - start_time
+                log[item['name']]['delta'] += datetime.now(tz) - start_time
                 for tag in item['tags']:
-                    tag_log[tag]['delta'] += datetime.utcnow() - start_time
+                    tag_log[tag]['delta'] += datetime.now(tz) - start_time
                 current = item['name']
 
     name_col_len = 0
@@ -410,13 +412,12 @@ def ensure_working():
                  "See `ti -h` to know how to start working.")
 
 
-def to_datetime(timestr):
-    return parse_engtime(timestr).isoformat() + 'Z'
+def to_datetime(timestr, tz):
+    return parse_engtime(timestr, tz).isoformat() + 'Z'
 
 
-def parse_engtime(timestr):
-
-    now = datetime.utcnow()
+def parse_engtime(timestr, tz):
+    now = datetime.now(tz)
     if not timestr or timestr.strip() == 'now':
         return now
 
@@ -442,8 +443,8 @@ def parse_engtime(timestr):
     raise BadTime("Don't understand the time %r" % (timestr,))
 
 
-def parse_isotime(isotime):
-    return datetime.strptime(isotime, '%Y-%m-%dT%H:%M:%S.%fZ')
+def parse_isotime(isotime, tz):
+    return datetime.strptime(isotime, '%Y-%m-%dT%H:%M:%S.%f%zZ').astimezone(tz)
 
 
 def timegap(start_time, end_time):
@@ -471,7 +472,6 @@ def timegap(start_time, end_time):
         return 'about {} months'.format(mins // 43200)
     else:
         return 'more than a year'
-
 
 def parse_args(argv=sys.argv):
     global use_color
@@ -501,12 +501,12 @@ def parse_args(argv=sys.argv):
         fn = action_on
         args = {
             'name': tail[0],
-            'time': to_datetime(' '.join(tail[1:])),
+            'time': to_datetime(' '.join(tail[1:]), tz),
         }
 
     elif head in ['f', 'fin']:
         fn = action_fin
-        args = {'time': to_datetime(' '.join(tail))}
+        args = {'time': to_datetime(' '.join(tail), tz)}
 
     elif head in ['s', 'status']:
         fn = action_status
@@ -537,7 +537,7 @@ def parse_args(argv=sys.argv):
         fn = action_interrupt
         args = {
             'name': tail[0],
-            'time': to_datetime(' '.join(tail[1:])),
+            'time': to_datetime(' '.join(tail[1:]), tz),
         }
 
     else:
