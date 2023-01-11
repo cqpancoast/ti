@@ -279,21 +279,16 @@ def action_log(period):
             start = datetime.combine(now - timedelta(days=1), time.min)
             end = datetime.combine(now - timedelta(days=1), time.max)
         elif time_string.startswith("the last "):
-            num_days = int(time_string.split()[-1])
+            num_days = int(time_string.split()[-2])
             start = now - timedelta(days=num_days)
             end = datetime.combine(now, time.max)
         elif time_string.endswith(" ago"):
             num_days = int(time_string.split()[0])
             start = now - timedelta(days=num_days)
             end = now
-        elif time_string.startswith("since "):
-            day_of_week = time_string.split()[1]
-            day_of_week_num = datetime.strptime(day_of_week, '%A').weekday()
-            num_days_since_monday = (now.weekday() - day_of_week_num) % 7
-            start = now - timedelta(days=num_days_since_monday)
-            end = datetime.combine(now, time.max)
-        elif time_string == "the past week":
-            start = now - timedelta(days=7)
+        elif time_string == "this week":  # since monday
+            day_of_week_num = datetime.now().weekday()
+            start = datetime.combine(now - timedelta(days=day_of_week_num), time.min)
             end = datetime.combine(now, time.max)
         else:
             raise ValueError(f"Unrecognized time string: {time_string}")
