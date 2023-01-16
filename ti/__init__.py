@@ -372,26 +372,16 @@ def action_edit():
         raise NoEditor("Please set the 'EDITOR' environment variable")
 
     data = store.load()
-    yml = yaml.safe_dump(data, default_flow_style=False, allow_unicode=True)
-
     cmd = os.getenv('EDITOR')
-    fd, temp_path = tempfile.mkstemp(prefix='ti.')
-    with open(temp_path, "r+") as f:
-        f.write(yml.replace('\n- ', '\n\n- '))
-        f.seek(0)
-        subprocess.check_call(cmd + ' ' + temp_path, shell=True)
-        yml = f.read()
-        f.truncate()
-        f.close
 
-    os.close(fd)
-    os.remove(temp_path)
-
-    try:
-        data = yaml.load(yml)
-    except:
-        raise InvalidYAML("Oops, that YAML doesn't appear to be valid!")
-
+    with tempfile.NamedTemporaryFile(mode='w+', delete=False) as temp:
+        temp.write(json.dumps(data, indent=4))
+        temp.seek(0)
+        subprocess.call([cmd, temp.name])
+        
+    with open(temp.name) as temp:
+        data = json.loads(temp.read())
+    os.remove(temp.name)
     store.dump(data)
 
 
